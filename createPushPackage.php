@@ -7,8 +7,11 @@
 // Use this script as an example to generate a push package dynamically.
 
 
-$certificate_path = "Cert";     // Change this to the path where your certificate is located
-$certificate_password = "Pass"; // Change this to the certificate's import password
+$certificate_path = "/Users/spandana/Documents/jaybird.cer";     // Change this to the path where your certificate is located
+$certificate_password = "canary"; // Change this to the certificate's import password
+
+echo 'calling push package';
+create_push_package();
 
 // Convenience function that returns an array of raw files needed to construct the package.
 function raw_files() {
@@ -53,16 +56,23 @@ function create_manifest($package_dir) {
 function create_signature($package_dir, $cert_path, $cert_password) {
     // Load the push notification certificate
     $pkcs12 = file_get_contents($cert_path);
+    echo $pkcs12;
     $certs = array();
-    if(!openssl_pkcs12_read($pkcs12, $certs, $cert_password)) {
-        return;
-    }
+    echo $package_dir;
+    echo "what is this spitting out";
+    // if(!openssl_pkcs12_read($pkcs12, $certs, $cert_password)) {
+    //     echo "something wrong here";
+    //     return;
+    // }
 
     $signature_path = "$package_dir/signature";
+    echo "signature_path";
+    echo $signature_path;
 
     // Sign the manifest.json file with the private key from the certificate
     $cert_data = openssl_x509_read($certs['cert']);
     $private_key = openssl_pkey_get_private($certs['pkey'], $cert_password);
+    echo "signing the manifest here";
     openssl_pkcs7_sign("$package_dir/manifest.json", $signature_path, $cert_data, $private_key, array(), PKCS7_BINARY | PKCS7_DETACHED);
 
     // Convert the signature from PEM to DER
@@ -100,7 +110,8 @@ function package_raw_data($package_dir) {
 // Creates the push package, and returns the path to the archive.
 function create_push_package() {
     global $certificate_path, $certificate_password, $id;
-
+    print($certificate_password);
+    print($certificate_path);
     // Create a temporary directory in which to assemble the push package
     $package_dir = '/tmp/pushPackage' . time();
     if (!mkdir($package_dir)) {
@@ -109,10 +120,13 @@ function create_push_package() {
     }
 
     copy_raw_push_package_files($package_dir, $id);
+    echo "done copying raw_push package";
     create_manifest($package_dir);
+    echo "created manifest";
     create_signature($package_dir, $certificate_path, $certificate_password);
     $package_path = package_raw_data($package_dir);
+    echo $package_path;
 
     return $package_path;
 }
-
+?>
