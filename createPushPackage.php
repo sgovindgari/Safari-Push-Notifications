@@ -6,12 +6,8 @@
 
 // Use this script as an example to generate a push package dynamically.
 
-
-$certificate_path = "/Users/spandana/Documents/jaybird.cer";     // Change this to the path where your certificate is located
+$certificate_path = "pkey.p12";     // Change this to the path where your certificate is located
 $certificate_password = "canary"; // Change this to the certificate's import password
-
-echo 'calling push package';
-create_push_package();
 
 // Convenience function that returns an array of raw files needed to construct the package.
 function raw_files() {
@@ -28,17 +24,9 @@ function raw_files() {
 
 // Copies the raw push package files to $package_dir.
 function copy_raw_push_package_files($package_dir) {
-	global $id;
     mkdir($package_dir . '/icon.iconset');
     foreach (raw_files() as $raw_file) {
         copy("pushPackage.raw/$raw_file", "$package_dir/$raw_file");
-		if($raw_file == "website.json") {
-			$wjson = file_get_contents("$package_dir/$raw_file");
-			unlink("$package_dir/$raw_file");
-			$ff = fopen("$package_dir/$raw_file", "x");
-			fwrite($ff, str_replace("{AUTHTOKEN}", "authenticationToken_".$id, $wjson)); // we have to add "authenticationToken_" because it has to be at least 16 for some reason thx apple
-			fclose($ff);
-		}
     }
 }
 
@@ -56,23 +44,16 @@ function create_manifest($package_dir) {
 function create_signature($package_dir, $cert_path, $cert_password) {
     // Load the push notification certificate
     $pkcs12 = file_get_contents($cert_path);
-    echo $pkcs12;
     $certs = array();
-    echo $package_dir;
-    echo "what is this spitting out";
-    // if(!openssl_pkcs12_read($pkcs12, $certs, $cert_password)) {
-    //     echo "something wrong here";
-    //     return;
-    // }
+    if(!openssl_pkcs12_read($pkcs12, $certs, $cert_password)) {
+        return;
+    }
 
     $signature_path = "$package_dir/signature";
-    echo "signature_path";
-    echo $signature_path;
 
     // Sign the manifest.json file with the private key from the certificate
     $cert_data = openssl_x509_read($certs['cert']);
     $private_key = openssl_pkey_get_private($certs['pkey'], $cert_password);
-    echo "signing the manifest here";
     openssl_pkcs7_sign("$package_dir/manifest.json", $signature_path, $cert_data, $private_key, array(), PKCS7_BINARY | PKCS7_DETACHED);
 
     // Convert the signature from PEM to DER
@@ -109,9 +90,8 @@ function package_raw_data($package_dir) {
 
 // Creates the push package, and returns the path to the archive.
 function create_push_package() {
-    global $certificate_path, $certificate_password, $id;
-    print($certificate_password);
-    print($certificate_path);
+    global $certificate_path, $certificate_password;
+
     // Create a temporary directory in which to assemble the push package
     $package_dir = '/tmp/pushPackage' . time();
     if (!mkdir($package_dir)) {
@@ -119,14 +99,21 @@ function create_push_package() {
         die;
     }
 
-    copy_raw_push_package_files($package_dir, $id);
-    echo "done copying raw_push package";
+    copy_raw_push_package_files($package_dir);
     create_manifest($package_dir);
-    echo "created manifest";
     create_signature($package_dir, $certificate_path, $certificate_password);
     $package_path = package_raw_data($package_dir);
-    echo $package_path;
-
     return $package_path;
 }
-?>
+
+
+// MAIN
+$package_path = create_push_package();
+if (empty($package_path)) {
+    http_response_code(500);
+    die;
+}
+
+header("Content-type: application/zip");
+echo $package_path;
+die;
